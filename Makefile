@@ -1,4 +1,4 @@
-TOOLS_VERSION=1.0.0
+TOOLS_VERSION=1.1.0
 
 build:
 	docker build -t ckemper/t7m-tools:${TOOLS_VERSION} .

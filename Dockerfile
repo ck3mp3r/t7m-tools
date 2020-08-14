@@ -1,7 +1,7 @@
-FROM hashicorp/terraform:0.12.28 as build
+FROM hashicorp/terraform:0.13.0 as tf
 # get the official terraform image, we're copying the binary into the other image below.
 
-FROM alpine:latest as final
+FROM alpine:latest as build
 
 ARG HELM_VERSION=2.16.7
 ARG KUBECTL_VERSION=1.18.0
@@ -13,10 +13,7 @@ ENV TAR_FILE="helm-v${HELM_VERSION}-linux-amd64.tar.gz"
 RUN apk add --update --no-cache curl ca-certificates bash && \
     curl -L ${BASE_URL}/${TAR_FILE} |tar xvz && \
     mv linux-amd64/helm /usr/bin/helm && \
-    chmod +x /usr/bin/helm && \
-    rm -rf linux-amd64 && \
-    apk del curl && \
-    rm -f /var/cache/apk/*
+    chmod +x /usr/bin/helm
 
 # Install kubectl
 RUN apk add --update --no-cache curl && \
@@ -29,17 +26,25 @@ RUN curl -LO https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/d
     mv aws-iam-authenticator_${AWS_IAM_AUTH_VERSION}_linux_amd64 /usr/bin/aws-iam-authenticator && \
     chmod +x /usr/bin/aws-iam-authenticator
 
-# installing other prerequisites
-RUN apk add --no-cache --update docker git openssh jq python3 py3-pip && \
-      pip3 install --upgrade pip awscli 
+FROM amazon/aws-cli:latest as final
 
-# now we copy the binary from the hashicorp container into our final container
-COPY --from=build ["/bin/terraform", "/bin/terraform"]
-COPY tf.sh /bin/tf
+# installing other prerequisites
+RUN yum update -y \
+  && yum install -y git jq docker \
+  && yum clean all
+
+# now we copy the binaries from the relevant containers into our final container
+COPY --from=tf ["/bin/terraform", "/bin/terraform"]
+COPY --from=build ["/usr/bin/kubectl", "/usr/bin/kubectl"]
+COPY --from=build ["/usr/bin/helm", "/usr/bin/helm"]
+COPY --from=build ["/usr/bin/aws-iam-authenticator", "/usr/bin/aws-iam-authenticator"]
+
+COPY scripts/tf.sh /bin/tf
+COPY scripts/aws-profile.sh /bin/aws-profile
 
 ENV AWS_SDK_LOAD_CONFIG=1
 
 WORKDIR /workspaces
 
 # bash entrypoint set as default
-ENTRYPOINT ["/bin/ash"]
+ENTRYPOINT ["/bin/bash"]
