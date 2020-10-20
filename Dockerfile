@@ -1,4 +1,4 @@
-FROM hashicorp/terraform:0.13.0 as tf
+FROM hashicorp/terraform:0.13.4 as tf
 # get the official terraform image, we're copying the binary into the other image below.
 
 FROM alpine:latest as build
