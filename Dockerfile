@@ -3,8 +3,8 @@ FROM hashicorp/terraform:0.13.0 as tf
 
 FROM alpine:latest as build
 
-ARG HELM_VERSION=2.16.7
-ARG KUBECTL_VERSION=1.18.0
+ARG HELM_VERSION=2.16.12
+ARG KUBECTL_VERSION=1.19.0
 ARG AWS_IAM_AUTH_VERSION=0.5.0
 
 # Install helm
