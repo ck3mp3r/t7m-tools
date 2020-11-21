@@ -1,15 +1,28 @@
-FROM hashicorp/terraform:0.13.4 as tf
+FROM hashicorp/terraform:0.13.5 as tf
 # get the official terraform image, we're copying the binary into the other image below.
+
+FROM alpine:latest as build_legacy
+ARG HELM2_VERSION=2.17.0
+
+# Install helm
+ENV BASE_URL="https://get.helm.sh"
+ENV TAR_FILE="helm-v${HELM2_VERSION}-linux-amd64.tar.gz"
+RUN apk add --update --no-cache curl ca-certificates bash && \
+    curl -L ${BASE_URL}/${TAR_FILE} |tar xvz && \
+    mv linux-amd64/helm /usr/bin/helm && \
+    chmod +x /usr/bin/helm && \
+    rm -rf linux-amd64 && \
+    rm -f /var/cache/apk/*
 
 FROM alpine:latest as build
 
-ARG HELM_VERSION=2.16.12
+ARG HELM3_VERSION=3.4.1
 ARG KUBECTL_VERSION=1.19.0
 ARG AWS_IAM_AUTH_VERSION=0.5.0
 
 # Install helm
 ENV BASE_URL="https://get.helm.sh"
-ENV TAR_FILE="helm-v${HELM_VERSION}-linux-amd64.tar.gz"
+ENV TAR_FILE="helm-v${HELM3_VERSION}-linux-amd64.tar.gz"
 RUN apk add --update --no-cache curl ca-certificates bash && \
     curl -L ${BASE_URL}/${TAR_FILE} |tar xvz && \
     mv linux-amd64/helm /usr/bin/helm && \
@@ -33,6 +46,7 @@ FROM alpine:latest as final
 ENV GLIBC_VER=2.31-r0
 
 RUN apk --no-cache add \
+        git \
         binutils \
         curl \
     && curl -sL https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub \
@@ -63,8 +77,12 @@ RUN apk --no-cache add bash git groff less curl jq python3 py3-pip docker unzip 
 # now we copy the binaries from the relevant containers into our final container
 COPY --from=tf ["/bin/terraform", "/bin/terraform"]
 COPY --from=build ["/usr/bin/kubectl", "/usr/bin/kubectl"]
-COPY --from=build ["/usr/bin/helm", "/usr/bin/helm"]
+COPY --from=build_legacy ["/usr/bin/helm", "/usr/bin/helm"]
+COPY --from=build ["/usr/bin/helm", "/usr/bin/helm3"]
 COPY --from=build ["/usr/bin/aws-iam-authenticator", "/usr/bin/aws-iam-authenticator"]
+
+# install helm 2 to 3 plugin
+RUN helm3 plugin install https://github.com/helm/helm-2to3.git
 
 COPY scripts/tf.sh /bin/tf
 COPY scripts/aws-profile.sh /bin/aws-profile
