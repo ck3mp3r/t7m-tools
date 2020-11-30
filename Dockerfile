@@ -1,19 +1,6 @@
 FROM hashicorp/terraform:0.13.5 as tf
 # get the official terraform image, we're copying the binary into the other image below.
 
-FROM alpine:latest as build_legacy
-ARG HELM2_VERSION=2.17.0
-
-# Install helm
-ENV BASE_URL="https://get.helm.sh"
-ENV TAR_FILE="helm-v${HELM2_VERSION}-linux-amd64.tar.gz"
-RUN apk add --update --no-cache curl ca-certificates bash && \
-    curl -L ${BASE_URL}/${TAR_FILE} |tar xvz && \
-    mv linux-amd64/helm /usr/bin/helm && \
-    chmod +x /usr/bin/helm && \
-    rm -rf linux-amd64 && \
-    rm -f /var/cache/apk/*
-
 FROM alpine:latest as build
 
 ARG HELM3_VERSION=3.4.1
@@ -77,12 +64,11 @@ RUN apk --no-cache add bash git groff less curl jq python3 py3-pip docker unzip 
 # now we copy the binaries from the relevant containers into our final container
 COPY --from=tf ["/bin/terraform", "/bin/terraform"]
 COPY --from=build ["/usr/bin/kubectl", "/usr/bin/kubectl"]
-COPY --from=build_legacy ["/usr/bin/helm", "/usr/bin/helm"]
-COPY --from=build ["/usr/bin/helm", "/usr/bin/helm3"]
+COPY --from=build ["/usr/bin/helm", "/usr/bin/helm"]
 COPY --from=build ["/usr/bin/aws-iam-authenticator", "/usr/bin/aws-iam-authenticator"]
 
 # install helm 2 to 3 plugin
-RUN helm3 plugin install https://github.com/helm/helm-2to3.git
+RUN helm plugin install https://github.com/helm/helm-2to3.git
 
 COPY scripts/tf.sh /bin/tf
 COPY scripts/aws-profile.sh /bin/aws-profile
