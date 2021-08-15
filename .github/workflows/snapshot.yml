@@ -3,7 +3,7 @@ name: snapshot
 on: [push, pull_request]
 
 jobs:
-  release:
+  snapshot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
