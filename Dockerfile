@@ -1,10 +1,10 @@
-FROM hashicorp/terraform:0.13.5 as tf
+FROM hashicorp/terraform:1.0.4 as tf
 # get the official terraform image, we're copying the binary into the other image below.
 
 FROM alpine:latest as build
 
-ARG HELM3_VERSION=3.4.1
-ARG KUBECTL_VERSION=1.19.0
+ARG HELM3_VERSION=3.6.3
+ARG KUBECTL_VERSION=1.22.0
 ARG AWS_IAM_AUTH_VERSION=0.5.0
 
 # Install helm
