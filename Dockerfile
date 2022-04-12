@@ -1,30 +1,32 @@
-FROM hashicorp/terraform:1.1.7 as tf
+FROM hashicorp/terraform:1.1.8 as tf
 # get the official terraform image, we're copying the binary into the other image below.
 
 FROM alpine:latest as build
 
 ARG HELM3_VERSION=3.8.1
-ARG KUBECTL_VERSION=1.23.0
+ARG KUBECTL_VERSION=1.23.5
 ARG AWS_IAM_AUTH_VERSION=0.5.0
 
 # Install helm
 ENV BASE_URL="https://get.helm.sh"
-ENV TAR_FILE="helm-v${HELM3_VERSION}-linux-amd64.tar.gz"
-RUN apk add --update --no-cache curl ca-certificates bash && \
-  curl -L ${BASE_URL}/${TAR_FILE} |tar xvz && \
-  mv linux-amd64/helm /usr/bin/helm && \
+RUN ARCH=$(case "aarch64" in (`arch`) echo arm64 ;; (*) echo amd64; esac) && \
+  apk add --update --no-cache curl ca-certificates bash && \
+  curl -L ${BASE_URL}/helm-v${HELM3_VERSION}-linux-${ARCH}.tar.gz |tar xvz && \
+  mv linux-${ARCH}/helm /usr/bin/helm && \
   chmod +x /usr/bin/helm && \
-  rm -rf linux-amd64 && \
+  rm -rf linux-${ARCH} && \
   rm -f /var/cache/apk/*
 
 # Install kubectl
-RUN curl -LO https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl && \
+RUN ARCH=$(case "aarch64" in (`arch`) echo arm64 ;; (*) echo amd64; esac) && \
+  curl -LO https://storage.googleapis.com/kubernetes-release/release/v${KUBECTL_VERSION}/bin/linux/$ARCH/kubectl && \
   mv kubectl /usr/bin/kubectl && \
   chmod +x /usr/bin/kubectl
 
 # Install aws-iam-authenticator
-RUN curl -LO https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v${AWS_IAM_AUTH_VERSION}/aws-iam-authenticator_${AWS_IAM_AUTH_VERSION}_linux_amd64 && \
-  mv aws-iam-authenticator_${AWS_IAM_AUTH_VERSION}_linux_amd64 /usr/bin/aws-iam-authenticator && \
+RUN ARCH=$(case "aarch64" in (`arch`) echo arm64 ;; (*) echo amd64; esac) && \
+  curl -LO https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v${AWS_IAM_AUTH_VERSION}/aws-iam-authenticator_${AWS_IAM_AUTH_VERSION}_linux_$ARCH && \
+  mv aws-iam-authenticator_${AWS_IAM_AUTH_VERSION}_linux_$ARCH /usr/bin/aws-iam-authenticator && \
   chmod +x /usr/bin/aws-iam-authenticator
 
 FROM alpine:latest as final
@@ -32,7 +34,8 @@ FROM alpine:latest as final
 # install aws cli with prerequisite glibc compatibility for alpine. Documentation here: https://github.com/sgerrand/alpine-pkg-glibc
 ENV GLIBC_VER=2.31-r0
 
-RUN apk --no-cache add \
+RUN ARCH=$(case "aarch64" in (`arch`) echo aarch64 ;; (*) echo x86_64; esac) && \
+  apk --no-cache add \
   git \
   binutils \
   curl \
@@ -42,7 +45,7 @@ RUN apk --no-cache add \
   && apk add --no-cache \
   glibc-${GLIBC_VER}.apk \
   glibc-bin-${GLIBC_VER}.apk \
-  && curl -sL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip \
+  && curl -sL https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip -o awscliv2.zip \
   && unzip awscliv2.zip \
   && aws/install \
   && rm -rf \
