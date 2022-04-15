@@ -1,6 +1,28 @@
 FROM hashicorp/terraform:1.1.8 as tf
 # get the official terraform image, we're copying the binary into the other image below.
 
+FROM python:3.9-alpine as installer
+
+RUN set -ex; \
+    apk add --no-cache \
+    git unzip groff \
+    build-base libffi-dev cmake
+
+ENV AWS_CLI_VERSION=2.5.4
+RUN set -eux; \
+    mkdir /aws; \
+    git clone --single-branch --depth 1 -b ${AWS_CLI_VERSION} https://github.com/aws/aws-cli.git /aws; \
+    cd /aws; \
+    sed -i'' 's/PyInstaller.*/PyInstaller==4.10/g' requirements-build.txt; \
+    python -m venv venv; \
+    . venv/bin/activate; \
+    ./scripts/installers/make-exe
+
+RUN set -ex; \
+    unzip /aws/dist/awscli-exe.zip; \
+    ./aws/install --bin-dir /aws-cli-bin; \
+    /aws-cli-bin/aws --version
+
 FROM alpine:latest as build
 
 ARG HELM3_VERSION=3.8.1
@@ -31,35 +53,6 @@ RUN ARCH=$(case "aarch64" in (`arch`) echo arm64 ;; (*) echo amd64; esac) && \
 
 FROM alpine:latest as final
 
-# install aws cli with prerequisite glibc compatibility for alpine. Documentation here: https://github.com/sgerrand/alpine-pkg-glibc
-ENV GLIBC_VER=2.31-r0
-
-RUN ARCH=$(case "aarch64" in (`arch`) echo aarch64 ;; (*) echo x86_64; esac) && \
-  apk --no-cache add \
-  git \
-  binutils \
-  curl \
-  && curl -sL https://alpine-pkgs.sgerrand.com/sgerrand.rsa.pub -o /etc/apk/keys/sgerrand.rsa.pub \
-  && curl -sLO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VER}/glibc-${GLIBC_VER}.apk \
-  && curl -sLO https://github.com/sgerrand/alpine-pkg-glibc/releases/download/${GLIBC_VER}/glibc-bin-${GLIBC_VER}.apk \
-  && apk add --no-cache \
-  glibc-${GLIBC_VER}.apk \
-  glibc-bin-${GLIBC_VER}.apk \
-  && curl -sL https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip -o awscliv2.zip \
-  && unzip awscliv2.zip \
-  && aws/install \
-  && rm -rf \
-  awscliv2.zip \
-  aws \
-  /usr/local/aws-cli/v2/*/dist/aws_completer \
-  /usr/local/aws-cli/v2/*/dist/awscli/data/ac.index \
-  /usr/local/aws-cli/v2/*/dist/awscli/examples \
-  && apk --no-cache del \
-  binutils \
-  curl \
-  && rm glibc-${GLIBC_VER}.apk \
-  && rm glibc-bin-${GLIBC_VER}.apk
-
 # installing other prerequisites
 RUN apk --no-cache add bash git groff less curl jq python3 py3-pip docker unzip \
   && rm -rf /var/cache/apk/*
@@ -69,6 +62,8 @@ COPY --from=tf ["/bin/terraform", "/bin/terraform"]
 COPY --from=build ["/usr/bin/kubectl", "/usr/bin/kubectl"]
 COPY --from=build ["/usr/bin/helm", "/usr/bin/helm"]
 COPY --from=build ["/usr/bin/aws-iam-authenticator", "/usr/bin/aws-iam-authenticator"]
+COPY --from=installer ["/usr/local/aws-cli/", "/usr/local/aws-cli/"]
+COPY --from=installer ["/aws-cli-bin/", "/usr/local/bin/"]
 
 COPY scripts/tf.sh /bin/tf
 COPY scripts/aws-profile.sh /bin/aws-profile
